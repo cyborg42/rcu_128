@@ -8,8 +8,6 @@ use std::{
     sync::atomic::{AtomicU128, Ordering},
 };
 
-use parking_lot::Mutex;
-
 pub struct RcuGuard<'a, T> {
     ptr: NonNull<T>,
     cell: &'a RcuCell<T>,
@@ -71,7 +69,6 @@ impl<T> Drop for RcuGuard<'_, T> {
 pub struct RcuCell<T> {
     ptr_counter_latest: AtomicU128,
     ptr_counter_to_clear: AtomicU128,
-    write_token: Mutex<()>,
     data: PhantomData<T>,
 }
 
@@ -80,7 +77,6 @@ impl<T> RcuCell<T> {
         Self {
             ptr_counter_latest: AtomicU128::new((Box::into_raw(Box::new(value)) as u128) << 64),
             ptr_counter_to_clear: AtomicU128::new(0),
-            write_token: Mutex::new(()),
             data: PhantomData,
         }
     }
@@ -107,16 +103,19 @@ impl<T> RcuCell<T> {
             return;
         }
         // only one thread can clear ptr_counter_to_clear at the same time
-        let write_guard = self.write_token.lock();
-        self.ptr_counter_to_clear
-            .store(old_ptr_counter, Ordering::Release);
+        while self
+            .ptr_counter_to_clear
+            .compare_exchange_weak(0, old_ptr_counter, Ordering::Release, Ordering::Acquire)
+            .is_err()
+        {
+            std::hint::spin_loop();
+        }
         // wait for all readers to finish
         while self.ptr_counter_to_clear.load(Ordering::Acquire) & 0xffff_ffff_ffff_ffff != 0 {
             std::hint::spin_loop();
         }
-        // clear ptr_counter_to_clear to prevent being same with new_ptr_counter
+        // clear ptr_counter_to_clear to allow other writers to release memory
         self.ptr_counter_to_clear.store(0, Ordering::Release);
-        drop(write_guard);
         unsafe {
             let ptr = NonNull::new_unchecked((old_ptr_counter >> 64) as usize as *mut T);
             std::ptr::drop_in_place(ptr.as_ptr());
