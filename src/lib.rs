@@ -1,5 +1,4 @@
 #![cfg(target_has_atomic = "128")]
-#![feature(allocator_api)]
 #![feature(integer_atomics)]
 #![no_std]
 extern crate alloc;

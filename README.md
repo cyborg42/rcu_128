@@ -1,6 +1,6 @@
 # Rcu128
 
-Rcu128 is a Rust library that provides a concurrent data structure for read-copy-update (RCU) style access to a value. It allows multiple readers to access the value concurrently, while ensuring safe updates by blocking relase value until all current readers have finished reading the old value.
+Rcu128 is a Rust library that provides a concurrent data structure for read-copy-update (RCU) style access to a value. It allows multiple readers to access the value concurrently while ensuring safe updates by blocking the release of the value until all current readers have finished reading the old value.
 
 ## Limitation
 
