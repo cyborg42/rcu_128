@@ -1,7 +1,11 @@
 #![feature(allocator_api)]
 #![feature(integer_atomics)]
-use std::{
-    alloc::{Allocator, Global, Layout},
+#![no_std]
+extern crate alloc;
+use alloc::boxed::Box;
+
+use core::{
+    hint,
     marker::PhantomData,
     ops::Deref,
     ptr::NonNull,
@@ -48,7 +52,7 @@ impl<T> Drop for RcuGuard<'_, T> {
                 // ptr_counter_latest has been updated, so we can't decrement it
                 break;
             }
-            std::hint::spin_loop();
+            hint::spin_loop();
         }
         // Decrement ptr_counter_to_clear
         loop {
@@ -68,7 +72,7 @@ impl<T> Drop for RcuGuard<'_, T> {
                 return;
             }
 
-            std::hint::spin_loop();
+            hint::spin_loop();
         }
     }
 }
@@ -165,9 +169,7 @@ impl<T> RcuCell<T> {
         if old_ptr_counter & 0xffff_ffff_ffff_ffff == 0 {
             // No reader, release memory directly
             unsafe {
-                let ptr = NonNull::new_unchecked((old_ptr_counter >> 64) as usize as *mut T);
-                std::ptr::drop_in_place(ptr.as_ptr());
-                Global.deallocate(ptr.cast(), Layout::new::<T>());
+                let _ = Box::from_raw((old_ptr_counter >> 64) as usize as *mut T);
             }
             return;
         }
@@ -177,43 +179,16 @@ impl<T> RcuCell<T> {
             .compare_exchange_weak(0, old_ptr_counter, Ordering::Release, Ordering::Acquire)
             .is_err()
         {
-            std::hint::spin_loop();
+            hint::spin_loop();
         }
         // Wait for all readers to finish
         while self.ptr_counter_to_clear.load(Ordering::Acquire) & 0xffff_ffff_ffff_ffff != 0 {
-            std::hint::spin_loop();
+            hint::spin_loop();
         }
         // Clear ptr_counter_to_clear to allow other writers to release memory
         self.ptr_counter_to_clear.store(0, Ordering::Release);
         unsafe {
-            let ptr = NonNull::new_unchecked((old_ptr_counter >> 64) as usize as *mut T);
-            std::ptr::drop_in_place(ptr.as_ptr());
-            Global.deallocate(ptr.cast(), Layout::new::<T>());
+            let _ = Box::from_raw((old_ptr_counter >> 64) as usize as *mut T);
         }
     }
-}
-
-#[test]
-fn test() {
-    use std::thread::sleep;
-    let x = RcuCell::new("0".to_string());
-    std::thread::scope(|s| {
-        s.spawn(|| {
-            for i in 0..40 {
-                sleep(std::time::Duration::from_millis(100));
-                let t = std::time::Instant::now();
-                x.write(i.to_string());
-                println!("{:?}", t.elapsed());
-            }
-        });
-        s.spawn(|| {
-            let mut guards: [RcuGuard<String>; 4] = [x.read(), x.read(), x.read(), x.read()];
-            for idx in 0..400 {
-                let r = x.read();
-                println!("{}", *r);
-                guards[idx % 4] = r;
-                sleep(std::time::Duration::from_millis(10));
-            }
-        });
-    })
 }
