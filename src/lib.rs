@@ -72,7 +72,6 @@ impl<T> Drop for RcuGuard<'_, T> {
             {
                 return;
             }
-
             hint::spin_loop();
         }
     }
@@ -119,7 +118,7 @@ impl<T> RcuCell<T> {
     /// concurrent read access to the `RcuCell`'s value.
     ///
     /// Once all `RcuGuard` instances referencing a particular value are
-    /// dropped, the value will be safely released.
+    /// dropped, the value can be safely released during an update.
     ///
     /// # Example
     ///
