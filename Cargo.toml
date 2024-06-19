@@ -1,6 +1,6 @@
 [package]
 name = "rcu_128"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Maverick Liu <maverick.liu42@gmail.com>"]
 edition = "2021"
 license = "MIT"
