@@ -1,6 +1,6 @@
 [package]
 name = "rcu_128"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Maverick Liu <maverick.liu42@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -10,3 +10,6 @@ categories = ["concurrency", "data-structures", "no-std"]
 repository = "https://github.com/cyborg42/rcu_128.git"
 readme = "README.md"
 exclude = [".gitignore"]
+
+[package.metadata.docs.rs]
+default-target = "x86_64-apple-darwin"
