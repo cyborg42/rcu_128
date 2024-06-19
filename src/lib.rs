@@ -139,9 +139,9 @@ impl<T> RcuCell<T> {
         RcuGuard { cell: self, ptr }
     }
 
-    /// Writes a new value to the `RcuCell`.
+    /// Updates to a new value.
     ///
-    /// This function immediately writes a new value to the `RcuCell`.
+    /// This function immediately updates the value in the `RcuCell`.
     /// It will block until all current readers have finished reading
     /// the old value.
     ///
@@ -156,13 +156,13 @@ impl<T> RcuCell<T> {
     ///
     /// ```
     /// let rcu_cell = rcu_128::RcuCell::new(42);
-    /// rcu_cell.write(100);
+    /// rcu_cell.update(100);
     /// {
     ///     let guard = rcu_cell.read();
     ///     assert_eq!(*guard, 100);
     /// }
     /// ```
-    pub fn write(&self, value: T) {
+    pub fn update(&self, value: T) {
         let new_ptr_counter = (Box::into_raw(Box::new(value)) as u128) << 64;
         let old_ptr_counter = self
             .ptr_counter_latest

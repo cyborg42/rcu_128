@@ -6,7 +6,7 @@ fn main() {
             for i in 0..40 {
                 sleep(std::time::Duration::from_millis(100));
                 let t = std::time::Instant::now();
-                x.write(i.to_string());
+                x.update(i.to_string());
                 println!("{:?}", t.elapsed());
             }
         });
