@@ -33,14 +33,14 @@ impl<T> Drop for RcuGuard<'_, T> {
     fn drop(&mut self) {
         // Try to decrement ptr_counter_latest first
         loop {
-            let ptr_counter_latest = self.cell.ptr_counter_latest.load(Ordering::Acquire);
-            if (ptr_counter_latest >> 64) as usize == self.ptr.as_ptr() as usize {
+            let ptr_counter = self.cell.ptr_counter_latest.load(Ordering::Acquire);
+            if (ptr_counter >> 64) as usize == self.ptr.as_ptr() as usize {
                 if self
                     .cell
                     .ptr_counter_latest
                     .compare_exchange_weak(
-                        ptr_counter_latest,
-                        ptr_counter_latest - 1,
+                        ptr_counter,
+                        ptr_counter - 1,
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     )
@@ -56,14 +56,14 @@ impl<T> Drop for RcuGuard<'_, T> {
         }
         // Decrement ptr_counter_to_clear
         loop {
-            let ptr_counter_old = self.cell.ptr_counter_to_clear.load(Ordering::Acquire);
-            if (ptr_counter_old >> 64) as usize == self.ptr.as_ptr() as usize
+            let ptr_counter = self.cell.ptr_counter_to_clear.load(Ordering::Acquire);
+            if (ptr_counter >> 64) as usize == self.ptr.as_ptr() as usize
                 && self
                     .cell
                     .ptr_counter_to_clear
                     .compare_exchange_weak(
-                        ptr_counter_old,
-                        ptr_counter_old - 1,
+                        ptr_counter,
+                        ptr_counter - 1,
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     )
@@ -172,14 +172,22 @@ impl<T> RcuCell<T> {
             }
             return;
         }
+
         // Only one thread can clear ptr_counter_to_clear at the same time
         while self
             .ptr_counter_to_clear
             .compare_exchange_weak(0, old_ptr_counter, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            hint::spin_loop();
+            // Inner loop to only get shared memory access (MESI protocal)
+            while self.ptr_counter_to_clear.load(Ordering::Acquire) != 0 {
+                hint::spin_loop();
+            }
         }
+
+        // No need to use CAS here because when the counter is 0,
+        // it will not be updated by other threads
+        //
         // Wait for all readers to finish
         while self.ptr_counter_to_clear.load(Ordering::Acquire) & 0xffff_ffff_ffff_ffff != 0 {
             hint::spin_loop();
