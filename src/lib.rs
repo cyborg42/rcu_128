@@ -175,7 +175,7 @@ impl<T> RcuCell<T> {
         // Only one thread can clear ptr_counter_to_clear at the same time
         while self
             .ptr_counter_to_clear
-            .compare_exchange_weak(0, old_ptr_counter, Ordering::Release, Ordering::Acquire)
+            .compare_exchange_weak(0, old_ptr_counter, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
             hint::spin_loop();
