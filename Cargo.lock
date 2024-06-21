@@ -61,7 +61,7 @@ dependencies = [
 
 [[package]]
 name = "rcu_128"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "parking_lot",
 ]

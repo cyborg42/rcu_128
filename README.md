@@ -29,13 +29,16 @@ fn main() {
         assert_eq!(*guard, 42);
     }
 
-    // Update to a new value
-    rcu_cell.update(100);
+    // Write a new value
+    rcu_cell.write(100);
+
+    // Upate with a function
+    rcu_cell.update(|value| value + 1);
 
     // Read the updated value
     {
         let guard = rcu_cell.read();
-        assert_eq!(*guard, 100);
+        assert_eq!(*guard, 101);
     }
 }
 ```
