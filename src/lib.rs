@@ -3,6 +3,7 @@
 #![no_std]
 extern crate alloc;
 use alloc::boxed::Box;
+use parking_lot::RwLock;
 
 use core::{
     hint,
@@ -82,6 +83,7 @@ pub struct RcuCell<T> {
     ptr_counter_latest: AtomicU128,
     ptr_counter_to_clear: AtomicU128,
     data: PhantomData<T>,
+    update_token: RwLock<()>,
 }
 
 impl<T> RcuCell<T> {
@@ -108,6 +110,7 @@ impl<T> RcuCell<T> {
             ptr_counter_latest: AtomicU128::new((Box::into_raw(Box::new(value)) as u128) << 64),
             ptr_counter_to_clear: AtomicU128::new(0),
             data: PhantomData,
+            update_token: RwLock::new(()),
         }
     }
 
@@ -117,7 +120,7 @@ impl<T> RcuCell<T> {
     /// concurrent read access to the `RcuCell`'s value.
     ///
     /// Once all `RcuGuard` instances referencing a particular value are
-    /// dropped, the value can be safely released during an update.
+    /// dropped, the value can be safely released during an update or write.
     ///
     /// # Example
     ///
@@ -137,9 +140,9 @@ impl<T> RcuCell<T> {
         RcuGuard { cell: self, ptr }
     }
 
-    /// Updates to a new value.
+    /// Writes a new value into the `RcuCell`.
     ///
-    /// This function immediately updates the value in the `RcuCell`.
+    /// This function immediately writes the new value into the `RcuCell`.
     /// It will block until all current readers have finished reading
     /// the old value.
     ///
@@ -154,17 +157,74 @@ impl<T> RcuCell<T> {
     ///
     /// ```
     /// let rcu_cell = rcu_128::RcuCell::new(42);
-    /// rcu_cell.update(100);
+    /// rcu_cell.write(100);
     /// {
     ///     let guard = rcu_cell.read();
     ///     assert_eq!(*guard, 100);
     /// }
     /// ```
-    pub fn update(&self, value: T) {
+    pub fn write(&self, value: T) {
         let new_ptr_counter = (Box::into_raw(Box::new(value)) as u128) << 64;
+        let token_shared = self.update_token.read();
         let old_ptr_counter = self
             .ptr_counter_latest
             .swap(new_ptr_counter, Ordering::AcqRel);
+        drop(token_shared);
+        self.clear(old_ptr_counter);
+    }
+
+    /// Updates the value stored in the `RcuCell` using a provided function.
+    ///
+    /// This function applies the given closure `f` to the current value
+    /// stored in the `RcuCell`, replacing it with the new value returned
+    /// by the closure. It will block until all current readers have finished
+    /// reading the old value.
+    ///
+    /// Once all readers have completed their read operations, the old value
+    /// will be safely released.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - A closure that takes a reference to the current value and returns
+    ///         a new value to store in the `RcuCell`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let rcu_cell = rcu_128::RcuCell::new(42);
+    /// rcu_cell.update(|&old_value| old_value + 1);
+    /// {
+    ///     let guard = rcu_cell.read();
+    ///     assert_eq!(*guard, 43);
+    /// }
+    /// ```
+    pub fn update(&self, mut f: impl FnMut(&T) -> T) {
+        let token_exclusive = self.update_token.write();
+        let old_value =
+            unsafe { &*((self.ptr_counter_latest.load(Ordering::Acquire) >> 64) as *const T) };
+        let new_value = f(old_value);
+        let new_ptr_counter = (Box::into_raw(Box::new(new_value)) as u128) << 64;
+        let old_ptr_counter = self
+            .ptr_counter_latest
+            .swap(new_ptr_counter, Ordering::AcqRel);
+        drop(token_exclusive);
+        self.clear(old_ptr_counter);
+    }
+
+    /// Clears the old value from memory once it is no longer needed.
+    ///
+    /// This function is called internally to release the memory of the old
+    /// value after it has been replaced by a new value. It ensures that all
+    /// readers have completed their read operations on the old value before
+    /// freeing the memory.
+    ///
+    /// # Arguments
+    ///
+    /// * `old_ptr_counter` - The old pointer and counter value to be cleared.
+    ///
+    /// This function does not need to be called directly by users of the
+    /// `RcuCell`.
+    fn clear(&self, old_ptr_counter: u128) {
         if old_ptr_counter & 0xffff_ffff_ffff_ffff == 0 {
             // No reader, release memory directly
             unsafe {
