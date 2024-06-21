@@ -42,7 +42,7 @@ impl<T> Drop for RcuGuard<'_, T> {
                         ptr_counter,
                         ptr_counter - 1,
                         Ordering::AcqRel,
-                        Ordering::Acquire,
+                        Ordering::Relaxed,
                     )
                     .is_ok()
                 {
@@ -65,7 +65,7 @@ impl<T> Drop for RcuGuard<'_, T> {
                         ptr_counter,
                         ptr_counter - 1,
                         Ordering::AcqRel,
-                        Ordering::Acquire,
+                        Ordering::Relaxed,
                     )
                     .is_ok()
             {
@@ -176,11 +176,11 @@ impl<T> RcuCell<T> {
         // Only one thread can clear ptr_counter_to_clear at the same time
         while self
             .ptr_counter_to_clear
-            .compare_exchange_weak(0, old_ptr_counter, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange_weak(0, old_ptr_counter, Ordering::AcqRel, Ordering::Relaxed)
             .is_err()
         {
             // Inner loop to only get shared memory access (MESI protocal)
-            while self.ptr_counter_to_clear.load(Ordering::Acquire) != 0 {
+            while self.ptr_counter_to_clear.load(Ordering::Relaxed) != 0 {
                 hint::spin_loop();
             }
         }
