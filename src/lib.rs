@@ -198,7 +198,7 @@ impl<T> RcuCell<T> {
     ///     assert_eq!(*guard, 43);
     /// }
     /// ```
-    pub fn update(&self, mut f: impl FnMut(&T) -> T) {
+    pub fn update(&self, f: impl FnOnce(&T) -> T) {
         let token_exclusive = self.update_token.write();
         let old_value =
             unsafe { &*((self.ptr_counter_latest.load(Ordering::Acquire) >> 64) as *const T) };
