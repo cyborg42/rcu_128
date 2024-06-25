@@ -88,6 +88,12 @@ pub struct RcuCell<T> {
     update_token: RwLock<()>,
 }
 
+impl<T: Default> Default for RcuCell<T> {
+    fn default() -> Self {
+        Self::new(Default::default())
+    }
+}
+
 impl<T> RcuCell<T> {
     /// Creates a new `RcuCell` with the given initial value.
     ///
