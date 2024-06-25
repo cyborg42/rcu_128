@@ -18,6 +18,7 @@ use core::{
 /// When this guard is dropped, it will signal that the read operation
 /// is complete, allowing the `RcuCell` to manage its internal state
 /// accordingly.
+#[derive(Debug)]
 pub struct RcuGuard<'a, T> {
     ptr: NonNull<T>,
     cell: &'a RcuCell<T>,
@@ -79,6 +80,7 @@ impl<T> Drop for RcuGuard<'_, T> {
 
 /// A concurrent data structure that allows for safe, read-copy-update (RCU)
 /// style access to its value.
+#[derive(Debug)]
 pub struct RcuCell<T> {
     ptr_counter_latest: AtomicU128,
     ptr_counter_to_clear: AtomicU128,
